@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "decanter"
+version = "0.1.0"
+description = "Open-source, CrossOver-compatible way to run Windows games and apps on macOS"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [{name = "Decanter contributors"}]
+classifiers = [
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Emulators",
+]
+
+[project.scripts]
+decanter = "decanter.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["decanter*"]

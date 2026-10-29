@@ -1,0 +1,10 @@
+#!/bin/sh
+# decanter launcher — runs the decanter package straight from a checkout,
+# or from an installed copy. Override the interpreter with DECANTER_PYTHON.
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ROOT=$(dirname "$SCRIPT_DIR")
+PYTHON="${DECANTER_PYTHON:-python3}"
+if [ -d "$ROOT/decanter" ]; then
+    PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" exec "$PYTHON" -m decanter "$@"
+fi
+exec "$PYTHON" -m decanter "$@"
