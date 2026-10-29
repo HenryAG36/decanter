@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from . import __version__
@@ -555,10 +556,16 @@ def cmd_setup_d3dmetal(args) -> int:
                "dmg (free Apple Developer account):")
         eprint("  https://developer.apple.com/download/all/?q=game%20porting%20toolkit")
         return 2
-    eng = get_engine(args.engine)
+    eng = (get_engine(args.engine) if args.engine else
+           ([e for e in discover_engines() if e.kind != "cx"] or [None])[0])
     if eng is None:
         eprint("error: no target engine; install one first "
                "(`decanter engine install`)")
+        return 2
+    if ".app/" in str(eng.root) or eng.root.suffix == ".app":
+        eprint(f"error: refusing to modify files inside an app bundle: {eng.root}")
+        eprint("target an engine installed by decanter instead "
+               "(`decanter engine install`, then -e ENGINE)")
         return 2
     with tempfile.TemporaryDirectory() as td:
         mount = Path(td) / "mnt"
@@ -568,31 +575,30 @@ def cmd_setup_d3dmetal(args) -> int:
         if rc:
             eprint("error: could not mount the dmg")
             return 1
+        inner_mount = None
         try:
-            # GPTK dmg contains a pkg; payload lives under lib/ + windows dlls
-            found = []
-            for cand in mount.rglob("*"):
-                if cand.name in ("D3DMetal.framework", "libd3dshared.dylib",
-                                 "apple_gptk"):
-                    found.append(cand)
-            pkg = next(mount.rglob("*.pkg"), None)
-            payload_root = None
-            if pkg:
-                expand = Path(td) / "pkg"
-                subprocess.call(["pkgutil", "--expand-full", str(pkg),
-                                 str(expand)], capture_output=True)
-                for cand in expand.rglob("apple_gptk"):
-                    payload_root = cand
-                    break
-                if payload_root is None:
-                    for cand in expand.rglob("D3DMetal.framework"):
-                        payload_root = cand.parent.parent
-                        break
+            payload_root = _find_gptk_payload(mount)
             if payload_root is None:
-                for cand in found:
-                    if cand.name == "apple_gptk":
-                        payload_root = cand
+                # GPTK 4.x nests the runtime in an "Evaluation environment" dmg
+                inner = next(mount.glob("*Windows games*.dmg"), None) or \
+                    next(mount.glob("*.dmg"), None)
+                if inner:
+                    inner_mount = Path(td) / "mnt2"
+                    inner_mount.mkdir()
+                    if subprocess.call(["hdiutil", "attach", str(inner),
+                                        "-mountpoint", str(inner_mount),
+                                        "-nobrowse", "-quiet"]) == 0:
+                        payload_root = _find_gptk_payload(inner_mount)
             if payload_root is None:
+                pkg = next(mount.rglob("*.pkg"), None)
+                if pkg:
+                    expand = Path(td) / "pkg"
+                    subprocess.run(["pkgutil", "--expand-full", str(pkg),
+                                    str(expand)], capture_output=True)
+                    payload_root = _find_gptk_payload(expand)
+            if payload_root is None:
+                if inner_mount:
+                    subprocess.call(["hdiutil", "detach", str(inner_mount), "-quiet"])
                 eprint("error: could not locate apple_gptk payload in the dmg")
                 return 1
             lib64 = eng.root / "lib64"
@@ -601,11 +607,49 @@ def cmd_setup_d3dmetal(args) -> int:
             if dest.exists():
                 shutil.rmtree(dest)
             shutil.copytree(payload_root, dest, symlinks=True)
+            # normalize: launchers expect external/libd3dshared.dylib
+            bare = dest / "libd3dshared.dylib"
+            if bare.is_file() and not (dest / "external").is_dir():
+                ext = dest / "external"
+                ext.mkdir()
+                for item in ("libd3dshared.dylib", "D3DMetal.framework"):
+                    src = dest / item
+                    if src.exists():
+                        src.rename(ext / item)
             print(f"installed D3DMetal payload -> {dest}")
             print("set per bottle: decanter config -b BOTTLE set backend=d3dmetal")
         finally:
-            subprocess.call(["hdiutil", "detach", str(mount), "-quiet"])
+            for mp in (inner_mount, mount):
+                if mp is None:
+                    continue
+                subprocess.call(["hdiutil", "detach", str(mp), "-quiet"])
+                # detach is async — wait so tempdir cleanup doesn't hit the
+                # still-mounted read-only fs
+                for _ in range(30):
+                    if not os.path.ismount(str(mp)):
+                        break
+                    time.sleep(0.1)
     return 0
+
+
+def _find_gptk_payload(root: Path) -> Path | None:
+    """Locate the dir to install as apple_gptk. Recognizes:
+    - CrossOver-style 'apple_gptk' dirs
+    - GPTK 4.x 'redist/lib' (contains external/D3DMetal.framework +
+      external/libd3dshared.dylib)
+    - any dir directly containing libd3dshared.dylib or D3DMetal.framework
+    """
+    for cand in root.rglob("*"):
+        if cand.name == "apple_gptk" and cand.is_dir():
+            return cand
+    for cand in root.rglob("libd3dshared.dylib"):
+        # cand is .../external/libd3dshared.dylib or bare dir
+        return cand.parent.parent if cand.parent.name == "external" \
+            else cand.parent
+    for cand in root.rglob("D3DMetal.framework"):
+        return cand.parent.parent if cand.parent.name == "external" \
+            else cand.parent
+    return None
 
 
 def cmd_list(args) -> int:
