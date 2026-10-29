@@ -12,10 +12,11 @@ struct ContentView: View {
     @State private var showLog = false
 
     enum Sheet: Identifiable {
-        case newBottle, install(Bottle?), runCmd(Bottle?), restore
+        case newBottle, install(Bottle?), runCmd(Bottle?), restore, migrate
         var id: String {
             switch self {
             case .newBottle: return "new"; case .restore: return "restore"
+            case .migrate: return "migrate"
             case .install(let b): return "install-\(b?.id ?? "none")"
             case .runCmd(let b): return "run-\(b?.id ?? "none")"
             }
@@ -86,6 +87,7 @@ struct ContentView: View {
                 .environmentObject(store)
             case .runCmd(let b): RunCommandSheet(bottle: b ?? selectedBottle)
                 .environmentObject(store)
+            case .migrate: MigrateSheet().environmentObject(store)
             }
         }
         .alert("Delete bottle?", isPresented: .constant(confirmDelete != nil)) {
@@ -178,9 +180,31 @@ struct HomeView: View {
     @EnvironmentObject var store: Store
     @Binding var sheet: ContentView.Sheet?
 
+    private var needsMigration: Bool {
+        store.bottles.contains {
+            $0.path.contains("/Library/Application Support/CrossOver/")
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                if needsMigration {
+                    HStack {
+                        Image(systemName: "arrow.right.circle.fill")
+                            .foregroundStyle(.blue)
+                        VStack(alignment: .leading) {
+                            Text("Your bottles live in CrossOver's folder")
+                                .bold()
+                            Text("Migrate to keep them safe if you remove CrossOver.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Migrate from CrossOver…") { sheet = .migrate }
+                    }
+                    .padding(12)
+                    .background(.blue.opacity(0.1), in: .rect(cornerRadius: 8))
+                }
                 if let d = store.doctor, !d.rosetta {
                     Label("Rosetta 2 is not installed — required for x86 Windows programs.",
                           systemImage: "exclamationmark.triangle.fill")

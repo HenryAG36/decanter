@@ -254,6 +254,35 @@ struct RunCommandSheet: View {
     }
 }
 
+struct MigrateSheet: View {
+    @EnvironmentObject var store: Store
+    @Environment(\.dismiss) var dismiss
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Migrate from CrossOver").font(.title2).bold()
+            Text("""
+            This moves your bottles into Decanter's own folder so nothing is \
+            lost when CrossOver and its support files are removed, installs a \
+            free open-source Wine engine if needed, and adjusts settings your \
+            old engine supported but the new one doesn't (e.g. D3DMetal → auto, \
+            MSync → ESync).
+
+            Nothing is deleted — CrossOver stays installed and your bottles \
+            keep working in Decanter.
+            """)
+            .font(.callout).foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                Button("Migrate") {
+                    store.cli(["migrate"]); dismiss()
+                }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20).frame(width: 440)
+    }
+}
+
 // MARK: - Preferences
 
 struct PreferencesView: View {

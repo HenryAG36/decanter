@@ -26,6 +26,7 @@ from .engine import (
 )
 from .programs import list_programs
 from .recipes import install_app, list_recipes
+from .migrate import migrate
 from .launcher import (
     LaunchOptions, LaunchError, run as launch_run, run_unix, run_wine_app,
     stop_bottle, wineserver_ctl,
@@ -230,6 +231,14 @@ def main(argv: list[str] | None = None) -> int:
     p_set = cfg_sub.add_parser("set", help="set KEY=VALUE pairs")
     p_set.add_argument("pairs", nargs="+")
 
+    # -- migration -----------------------------------------------------------
+    p_mig = sub.add_parser("migrate",
+                           help="move bottles out of CrossOver's folder and "
+                                "ensure an open engine is installed")
+    p_mig.add_argument("--dry-run", action="store_true",
+                       help="show the plan without changing anything")
+    p_mig.add_argument("--engine-url", help="force a specific engine tarball")
+
     # -- install recipes -----------------------------------------------------
     p_inst2 = sub.add_parser("install",
                              help="install a known application from a recipe")
@@ -379,6 +388,11 @@ def _dispatch(args) -> int:
                               "env": b.env_vars()}))
             return 0
         return cmd_config(args)
+    if cmd == "migrate":
+        r = migrate(dry_run=args.dry_run, engine_url=args.engine_url)
+        if args.json:
+            print(json.dumps(r))
+        return 0
     if cmd == "install":
         if args.list or not args.recipe:
             recs = list_recipes()
