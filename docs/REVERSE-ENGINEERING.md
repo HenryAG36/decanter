@@ -167,3 +167,26 @@ workflows with original code/layout.
   Filenames escape as `+`=space, `^XX`=hex.
 * Paid/licensing surfaces (DemoNag, SerialCodeRegister, Publish,
   SubmitRating, CrossTie recipe DB) deliberately not reproduced.
+
+## 9. Install recipes (c4p / CrossTie)
+
+The recipe database is a downloaded XML (`~/Library/Application
+Support/CrossOver/tie/crossover.tie`, ~24 MB). Each `<app>` profile
+declares, in readable terms: `bottletemplate`, `appbottlegroup`,
+`downloadurl` (+ `downloadglob` filename patterns), `predependency` /
+`dependency` ids, `installerenvironment` vars, `preinstallregistry`
+presets, `cdglob` media detection and compatibility medals.
+
+Steam (c4.206, the profile that built the local Steam bottle):
+template winxp, deps = Core Fonts / CX HTML engine / DirectX Modern /
+MSXML3 / Flash, download via `crossover.codeweavers.com/redirect/
+steamMSI` -> `media.steampowered.com/client/installer/SteamSetup.exe`,
+env `WINE_WAIT_CHILD_PIPE_IGNORE=steam.exe` (so installer wait doesn't
+hang when steam.exe daemonizes), registry presets disabling
+`wineoss.drv` for steam.exe + font replacements.
+
+Decanter equivalent: `recipes/*.json` + `decanter install` — open schema
+(url, filename, args, env, registry presets, winetricks verbs,
+template, post_run). `decanter install steam` verified end-to-end:
+silent /S install produced a working steam.exe + a desktop .lnk that
+the programs scanner picked up automatically.

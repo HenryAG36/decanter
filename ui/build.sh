@@ -13,6 +13,7 @@ cp Info.plist "$APP/Contents/"
 
 # bundle the python backend (pure stdlib — runs on /usr/bin/python3)
 cp -R "$ROOT/decanter" "$APP/Contents/Resources/python/"
+cp -R "$ROOT/recipes" "$APP/Contents/Resources/python/"
 
 "$SWIFTC" -O -sdk "$SDK" -target arm64-apple-macos14.0 \
     -framework SwiftUI -framework AppKit -framework UniformTypeIdentifiers \

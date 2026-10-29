@@ -1,0 +1,27 @@
+{
+  "name": "Steam",
+  "category": "Games/Game Tools",
+  "description": "Valve Steam client. Downloads the official installer from Valve's CDN (the same destination CrossOver's redirect resolves to: media.steampowered.com).",
+  "bottle_name": "Steam",
+  "template": "win10_64",
+  "url": "https://cdn.fastly.steamstatic.com/client/installer/SteamSetup.exe",
+  "filename": "SteamSetup.exe",
+  "args": ["/S"],
+  "env": {
+    "WINE_WAIT_CHILD_PIPE_IGNORE": "steam.exe"
+  },
+  "registry": [
+    {
+      "key": "HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\steam.exe\\DllOverrides",
+      "value": "wineoss.drv",
+      "data": "d"
+    },
+    {
+      "key": "HKEY_CURRENT_USER\\Software\\Wine\\Fonts\\Replacements",
+      "value": "Lucida Console",
+      "data": "MS Sans Serif"
+    }
+  ],
+  "winetricks": ["corefonts"],
+  "notes": "SteamSetup self-updates on first launch. corefonts improves UI text rendering; MSXML3/Flash deps in the original profile are obsolete for the modern client."
+}

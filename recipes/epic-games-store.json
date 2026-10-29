@@ -1,0 +1,15 @@
+{
+  "name": "Epic Games Store",
+  "category": "Games/Game Tools",
+  "description": "Epic Games Launcher (MSI). Official Epic CDN.",
+  "bottle_name": "Epic Games Store",
+  "template": "win10_64",
+  "url": "https://epicgames-download1.akamaized.net/Builds/UnrealEngineLauncher/Installers/Win32/EpicInstaller.msi",
+  "filename": "EpicInstaller.msi",
+  "args": ["/passive"],
+  "env": {
+    "WINE_WAIT_CHILD_PIPE_IGNORE": "EpicGamesLauncher.exe"
+  },
+  "winetricks": [],
+  "notes": "MSI runs via msiexec /i by decanter automatically. EGL needs -SkipBuildPatchPrereq on some builds; add it to a shortcut if launch fails."
+}

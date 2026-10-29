@@ -71,35 +71,69 @@ struct RestoreSheet: View {
     }
 }
 
+struct Recipe: Codable, Identifiable {
+    var id: String
+    var name: String
+    var description: String?
+    var bottle_name: String?
+    var template: String?
+}
+
 struct InstallSheet: View {
     @EnvironmentObject var store: Store
     @Environment(\.dismiss) var dismiss
     let bottle: Bottle?
+    @State private var mode = "recipe"
+    @State private var recipes: [Recipe] = []
+    @State private var recipeID = ""
     @State private var installer = ""
     @State private var target: String = ""
-    @State private var useNewBottle = false
     @State private var newName = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Install a Windows Application").font(.title2).bold()
-            HStack {
-                TextField("Installer file:", text: $installer)
-                Button("Choose…") {
-                    let p = NSOpenPanel()
-                    p.allowedContentTypes = [
-                        .init(filenameExtension: "exe") ?? .data,
-                        .init(filenameExtension: "msi") ?? .data,
-                        .init(filenameExtension: "bat") ?? .data]
-                    if p.runModal() == .OK { installer = p.url?.path ?? installer }
+            Picker("", selection: $mode) {
+                Text("Known application").tag("recipe")
+                Text("Installer file").tag("file")
+            }.pickerStyle(.segmented).labelsHidden()
+            if mode == "recipe" {
+                if recipes.isEmpty {
+                    Text("Loading recipes…").foregroundStyle(.secondary)
+                } else {
+                    Picker("Application:", selection: $recipeID) {
+                        ForEach(recipes) { Text($0.name).tag($0.id) }
+                    }
+                    if let r = recipes.first(where: { $0.id == recipeID }),
+                       let d = r.description {
+                        Text(d).font(.caption).foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Text("Bottle:").foregroundStyle(.secondary)
+                        TextField("name", text: $newName)
+                    }
+                }
+            } else {
+                HStack {
+                    TextField("Installer file:", text: $installer)
+                    Button("Choose…") {
+                        let p = NSOpenPanel()
+                        p.allowedContentTypes = [
+                            .init(filenameExtension: "exe") ?? .data,
+                            .init(filenameExtension: "msi") ?? .data,
+                            .init(filenameExtension: "bat") ?? .data]
+                        if p.runModal() == .OK { installer = p.url?.path ?? installer }
+                    }
                 }
             }
-            Picker("Install into:", selection: $target) {
-                Text("New bottle…").tag("__new__")
-                ForEach(store.bottles) { Text($0.name).tag($0.path) }
-            }
-            if target == "__new__" {
-                TextField("New bottle name:", text: $newName)
+            if mode == "file" {
+                Picker("Install into:", selection: $target) {
+                    Text("New bottle…").tag("__new__")
+                    ForEach(store.bottles) { Text($0.name).tag($0.path) }
+                }
+                if target == "__new__" {
+                    TextField("New bottle name:", text: $newName)
+                }
             }
             Text("It is recommended that you install into a new bottle to avoid interference between programs.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -108,14 +142,40 @@ struct InstallSheet: View {
                 Button("Cancel") { dismiss() }
                 Button("Install") { install(); dismiss() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(installer.isEmpty || (target == "__new__" && newName.isEmpty))
+                    .disabled(canInstall)
             }
         }
-        .padding(20).frame(width: 460)
-        .onAppear { if let b = bottle { target = b.path } else { target = "__new__" } }
+        .padding(20).frame(width: 480)
+        .onAppear {
+            if let b = bottle { target = b.path } else { target = "__new__" }
+            Task.detached {
+                let rs = (try? DecanterCLI.decode([Recipe].self, ["install", "--list"])) ?? []
+                await MainActor.run {
+                    recipes = rs
+                    recipeID = rs.first?.id ?? ""
+                    if newName.isEmpty { newName = rs.first?.bottle_name ?? "" }
+                }
+            }
+        }
+        .onChange(of: recipeID) { _, v in
+            if let r = recipes.first(where: { $0.id == v }) {
+                newName = r.bottle_name ?? r.name
+            }
+        }
+    }
+
+    private var canInstall: Bool {
+        if mode == "recipe" {
+            return recipeID.isEmpty || newName.trimmingCharacters(in: .whitespaces).isEmpty
+        }
+        return installer.isEmpty || (target == "__new__" && newName.isEmpty)
     }
 
     private func install() {
+        if mode == "recipe" {
+            store.cli(["install", recipeID, "-b", newName])
+            return
+        }
         if target == "__new__" {
             store.cli(["create", newName]) { _ in
                 DispatchQueue.main.async {

@@ -25,6 +25,7 @@ from .engine import (
     get_engine, install_engine, ENGINES_DIR,
 )
 from .programs import list_programs
+from .recipes import install_app, list_recipes
 from .launcher import (
     LaunchOptions, LaunchError, run as launch_run, run_unix, run_wine_app,
     stop_bottle, wineserver_ctl,
@@ -229,6 +230,19 @@ def main(argv: list[str] | None = None) -> int:
     p_set = cfg_sub.add_parser("set", help="set KEY=VALUE pairs")
     p_set.add_argument("pairs", nargs="+")
 
+    # -- install recipes -----------------------------------------------------
+    p_inst2 = sub.add_parser("install",
+                             help="install a known application from a recipe")
+    p_inst2.add_argument("recipe", nargs="?",
+                         help="recipe id (see --list)")
+    p_inst2.add_argument("-b", "--bottle", help="bottle name to create/use")
+    p_inst2.add_argument("-t", "--template", help="override recipe bottle template")
+    p_inst2.add_argument("-e", "--engine", help="engine selector")
+    p_inst2.add_argument("--list", action="store_true",
+                         help="list available recipes")
+    p_inst2.add_argument("--dry-run", action="store_true",
+                         help="show the install plan without executing")
+
     # -- shortcuts -----------------------------------------------------------
     p_sh = sub.add_parser("shortcut", help="create a double-clickable .app "
                           "for a Windows program")
@@ -365,6 +379,26 @@ def _dispatch(args) -> int:
                               "env": b.env_vars()}))
             return 0
         return cmd_config(args)
+    if cmd == "install":
+        if args.list or not args.recipe:
+            recs = list_recipes()
+            if args.json:
+                print(json.dumps(recs))
+                return 0
+            if not recs:
+                print("no recipes found")
+                return 1
+            for r in recs:
+                print(f"{r['id']:<24} {r['name']} — {r.get('description', '')[:60]}")
+            if not args.recipe:
+                print("\nusage: decanter install RECIPE [-b BOTTLE_NAME]")
+            return 0 if recs else 1
+        eng = _engine_or_fail(args.engine)
+        b = install_app(args.recipe, args.bottle, eng,
+                        template=args.template, dry_run=args.dry_run)
+        if b:
+            print(f"installed {args.recipe} into {b.name!r}")
+        return 0
     if cmd == "shortcut":
         b = _bottle_or_fail(args.bottle)
         target = args.exe
