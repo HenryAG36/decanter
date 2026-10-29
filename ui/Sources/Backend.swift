@@ -179,8 +179,12 @@ final class Store: ObservableObject {
     @Published var outputLog: String = ""
     @Published var selectedProgram: String?              // programKey, nil = nothing selected
     @Published var running: Set<String> = []             // programKeys with a live process
+    @Published var runningBottles: Set<String> = []      // bottle paths with a live wineserver
+    @Published var pendingLaunch: (Bottle, Program)?     // needs "open twice" confirmation
     private var recentlyLaunched: [String: Date] = [:]   // optimistic "just started" marks
     private var pollTimer: Timer?
+
+    enum BottleStatus { case stopped, starting, running }
 
     func refresh() {
         busy = true
@@ -240,14 +244,33 @@ final class Store: ObservableObject {
 
     func programKey(_ b: Bottle, _ p: Program) -> String { b.path + "|" + p.name }
 
-    /// Launch a program, refusing a second instance while one is live.
+    /// Live state of a bottle: stopped → starting (just launched) → running.
+    func bottleStatus(_ b: Bottle) -> BottleStatus {
+        if runningBottles.contains(b.path) { return .running }
+        if recentlyLaunched.keys.contains(where: { $0.hasPrefix(b.path + "|") }) {
+            return .starting }
+        return .stopped
+    }
+
+    /// Launch a program, refusing a second instance while one is live and
+    /// asking first when the bottle is still spinning up.
     func launchProgram(_ b: Bottle, _ p: Program) {
-        guard let t = p.target else {
+        guard p.target != nil else {
             lastError = "'\(p.name)' has no launch target."; return }
         let key = programKey(b, p)
         if running.contains(key) || recentlyLaunched[key] != nil {
             lastError = "'\(p.name)' is already running."; return }
-        recentlyLaunched[key] = Date()
+        // warn before opening a second thing in an already-live bottle —
+        // same-program duplicates are blocked outright above
+        if bottleStatus(b) != .stopped {
+            pendingLaunch = (b, p); return }
+        forceLaunch(b, p)
+    }
+
+    /// The actual spawn — also called by the "launch anyway" confirmation.
+    func forceLaunch(_ b: Bottle, _ p: Program) {
+        guard let t = p.target else { return }
+        recentlyLaunched[programKey(b, p)] = Date()
         if p.isURL { cli(["start", "-b", b.path, t], refreshAfter: false) }
         else { launch(["-b", b.path, "--", t]) }
         // catch the spawned process (or learn it already exited)
@@ -268,11 +291,22 @@ final class Store: ObservableObject {
                 data: pipe.fileHandleForReading.readDataToEndOfFile(),
                 encoding: .utf8)?.lowercased() ?? ""
             var live: Set<String> = []
+            var liveBottles: Set<String> = []
             for b in bottles {
                 for prog in progs[b.path] ?? [] {
                     if let exe = prog.exeBasename, !exe.isEmpty,
                        out.contains(exe) {
                         live.insert(b.path + "|" + prog.name)
+                    }
+                }
+                // a bottle is open while its wineserver socket exists —
+                // /tmp/.wine-<uid>/server-<dev-hex>-<inode-hex>
+                if let a = try? FileManager.default.attributesOfItem(atPath: b.path),
+                   let dev = a[.systemNumber] as? NSNumber,
+                   let ino = a[.systemFileNumber] as? NSNumber {
+                    let sock = "/tmp/.wine-\(getuid())/server-\(String(dev.uint64Value, radix: 16))-\(String(ino.uint64Value, radix: 16))"
+                    if FileManager.default.fileExists(atPath: sock) {
+                        liveBottles.insert(b.path)
                     }
                 }
             }
@@ -281,6 +315,14 @@ final class Store: ObservableObject {
                 let cutoff = Date().addingTimeInterval(-20)
                 self.recentlyLaunched = self.recentlyLaunched.filter { $0.value > cutoff }
                 self.running = live.union(self.recentlyLaunched.keys)
+                // a bottle counts as open if wineserver lives OR one of its
+                // programs is live/just-launched
+                let recentPaths = Set(self.recentlyLaunched.keys.map {
+                    String($0.split(separator: "|").dropLast().joined(separator: "|")) })
+                self.runningBottles = liveBottles
+                    .union(Set(live.map {
+                        String($0.split(separator: "|").dropLast().joined(separator: "|")) }))
+                    .union(recentPaths)
             }
         }
     }

@@ -42,7 +42,18 @@ struct ContentView: View {
                                             in: .rect(cornerRadius: 6))
                             VStack(alignment: .leading) {
                                 Text(b.name)
-                                Text(b.subtitle).font(.caption).foregroundStyle(.secondary)
+                                let st = store.bottleStatus(b)
+                                if st == .running {
+                                    Label("Running", systemImage: "circle.fill")
+                                        .font(.caption2).foregroundStyle(.green)
+                                        .labelStyle(.titleAndIcon)
+                                } else if st == .starting {
+                                    Label("Opening…", systemImage: "circle.dotted")
+                                        .font(.caption2).foregroundStyle(.orange)
+                                        .labelStyle(.titleAndIcon)
+                                } else {
+                                    Text(b.subtitle).font(.caption).foregroundStyle(.secondary)
+                                }
                             }
                             if b.default == true { Spacer(); Image(systemName: "star.fill")
                                 .foregroundStyle(.yellow).font(.caption) }
@@ -112,6 +123,19 @@ struct ContentView: View {
             set: { if !$0 { store.lastError = nil } })) {
             Button("OK") { store.lastError = nil }
         } message: { Text(store.lastError ?? "") }
+        .alert("Bottle already open", isPresented: Binding(
+            get: { store.pendingLaunch != nil },
+            set: { if !$0 { store.pendingLaunch = nil } })) {
+            Button("Launch Anyway") {
+                if let (b, p) = store.pendingLaunch { store.forceLaunch(b, p) }
+                store.pendingLaunch = nil
+            }
+            Button("Cancel", role: .cancel) { store.pendingLaunch = nil }
+        } message: {
+            if let (b, p) = store.pendingLaunch {
+                Text("Bottle '\(b.name)' already has a running application. Launch '\(p.name)' in it anyway?")
+            }
+        }
         .alert("Rename Bottle", isPresented: .constant(renameTarget != nil)) {
             TextField("New name", text: $renameText)
             Button("Rename") {
@@ -293,7 +317,17 @@ struct BottleDetailView: View {
         HStack(alignment: .center) {
             Image(systemName: "wineglass").font(.system(size: 34))
             VStack(alignment: .leading, spacing: 2) {
-                Text(bottle.name).font(.title).bold()
+                HStack(spacing: 8) {
+                    Text(bottle.name).font(.title).bold()
+                    switch store.bottleStatus(bottle) {
+                    case .running:
+                        Label("Running", systemImage: "circle.fill").foregroundStyle(.green)
+                    case .starting:
+                        Label("Opening…", systemImage: "circle.dotted").foregroundStyle(.orange)
+                    case .stopped:
+                        Label("Not running", systemImage: "circle").foregroundStyle(.secondary)
+                    }
+                }
                 Text(bottle.path).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
