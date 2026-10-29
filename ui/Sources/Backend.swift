@@ -189,7 +189,8 @@ final class Store: ObservableObject {
             await MainActor.run {
                 self.bottles = bottles; self.engines = engines
                 self.doctor = doctor; self.programs = progs
-                self.busy = false; self.lastError = err
+                self.busy = false
+                if let err { self.lastError = err }  // never clear an error the user hasn't dismissed
             }
         }
     }

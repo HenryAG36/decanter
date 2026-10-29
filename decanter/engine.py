@@ -428,7 +428,115 @@ def install_engine(url: str, dest_name: str | None = None,
         tf.extractall(dest, filter="data")
     tmp.unlink()
     # locate the actual engine root inside the extracted tree
-    return _find_engine_root(dest) or dest
+    root = _find_engine_root(dest) or dest
+    _fixup_engine(root, progress)
+    return root
+
+
+# dylibs tied to the engine's own wine build — never graft these
+_GRAFT_SKIP = ("libwine", "libvkd3d", "libd3dshared")
+
+
+def _fixup_engine(root: Path, progress=print) -> None:
+    """Repair incomplete third-party engine bundles in-place.
+
+    Some community builds (Sikarugir/Kegworks ``wswine.bundle``) ship a
+    slim bundle meant to be completed by their own launcher: ``wineserver``
+    references ``@rpath`` libs with no LC_RPATH entries, and dlopen'd libs
+    (freetype, gnutls, …) are absent entirely. Two repairs, both best-effort:
+
+    1. add LC_RPATH entries for the bundle's own lib dirs to any binary in
+       ``bin/`` that loads ``@rpath`` libraries but declares no rpaths;
+    2. graft missing third-party ``.dylib`` files from other installed
+       engines (fill-only, never overwrite).
+    """
+    libdirs = [d for d in (root / "lib64", root / "lib") if d.is_dir()]
+    if not libdirs:
+        return
+
+    # -- (1) fix binaries whose @rpath deps can never resolve ---------------
+    bindir = root / "bin"
+    for b in sorted(bindir.iterdir()) if bindir.is_dir() else []:
+        if not b.is_file() or b.suffix:
+            continue
+        try:
+            hdr = subprocess.run(
+                ["otool", "-l", str(b)],
+                capture_output=True, text=True, timeout=20).stdout
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if "@rpath/" not in hdr or "LC_RPATH" in hdr:
+            continue
+        fixed = False
+        for d in libdirs:
+            r = subprocess.run(
+                ["install_name_tool", "-add_rpath", str(d), str(b)],
+                capture_output=True, timeout=20)
+            fixed = fixed or r.returncode == 0
+        if fixed:
+            subprocess.run(["codesign", "-s", "-", "--force", str(b)],
+                           capture_output=True, timeout=20)
+            progress(f"repaired @rpath resolution in {b.name}")
+
+    # -- (2) graft missing payload dirs + dylibs from sibling engines -------
+    primary = root / "lib64" if (root / "lib64").is_dir() else libdirs[0]
+    primary.mkdir(parents=True, exist_ok=True)
+    have = {p.name for d in libdirs for p in d.iterdir()}
+    grafted = 0
+    for eng in discover_engines():
+        if eng.root == root:
+            continue
+        for d in eng.lib_dirs:
+            if not d.is_dir():
+                continue
+            # whole-payload dirs the user already provisioned once
+            for payload in ("apple_gptk", "dxvk"):
+                src, tgt = d / payload, primary / payload
+                if payload not in have and src.is_dir():
+                    try:
+                        shutil.copytree(src, tgt, symlinks=True)
+                        have.add(payload)
+                        grafted += 1
+                        progress(f"grafted {payload}/ from engine '{eng.name}'")
+                    except OSError:
+                        pass
+            for p in sorted(d.iterdir()):
+                if p.name in have or ".dylib" not in p.name:
+                    continue
+                if any(p.name.startswith(s) for s in _GRAFT_SKIP):
+                    continue
+                if p.is_symlink():
+                    # copy the link target first so the link never dangles
+                    real = p.resolve()
+                    if ".dylib" in real.name and real.name not in have \
+                            and not any(real.name.startswith(s)
+                                        for s in _GRAFT_SKIP):
+                        try:
+                            shutil.copy2(real, primary / real.name)
+                            have.add(real.name)
+                            grafted += 1
+                        except OSError:
+                            continue
+                    try:
+                        os.symlink(os.readlink(p), primary / p.name)
+                        have.add(p.name)
+                    except OSError:
+                        pass
+                    continue
+                try:
+                    shutil.copy2(p, primary / p.name)
+                    have.add(p.name)
+                    grafted += 1
+                except OSError:
+                    pass
+    if grafted:
+        progress(f"grafted {grafted} missing libraries from other engines")
+    need = {"libfreetype.6.dylib", "libgnutls.30.dylib"}
+    missing = [n for n in need if not any((d / n).exists() for d in libdirs)]
+    if missing:
+        progress("note: engine lacks " + ", ".join(missing) +
+                 " — install another engine once (e.g. wine-crossover) "
+                 "to let decanter graft them")
 
 
 # ---------------------------------------------------------------------------

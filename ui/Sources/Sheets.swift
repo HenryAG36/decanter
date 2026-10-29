@@ -157,9 +157,14 @@ struct InstallSheet: View {
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }
-                Button("Install") { install(); dismiss() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(canInstall)
+                Button("Install") {
+                    // Dismiss first, then run — an error alert attaching while
+                    // the sheet is mid-dismiss shoves the window off-screen.
+                    dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { install() }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(canInstall)
             }
         }
         .padding(20).frame(width: 480)
