@@ -341,11 +341,11 @@ def default_engine() -> Engine | None:
         for e in engines:
             if str(e.root) == want:
                 return e
-    # prefer cx engines (best compatibility), then any
+    # prefer cx engines (best compatibility), then the most capable
     for e in engines:
         if e.kind == "cx":
             return e
-    return engines[0]
+    return max(engines, key=lambda e: len(e.available_backends()))
 
 
 def get_engine(selector: str | None) -> Engine | None:

@@ -74,7 +74,11 @@ def migrate(dry_run: bool = False, engine_url: str | None = None,
     # 1. ensure an open engine -------------------------------------------
     engines = discover_engines()
     open_engines = [e for e in engines if e.kind != "cx"]
-    target: Engine | None = open_engines[0] if open_engines else None
+    # prefer the most capable engine (more translation backends = closer to
+    # CrossOver parity), not just whichever was discovered first
+    target: Engine | None = (max(open_engines,
+                                 key=lambda e: len(e.available_backends()))
+                             if open_engines else None)
     if target is None:
         if engine_url is None:
             progress("no open engine installed — finding one")
@@ -90,7 +94,7 @@ def migrate(dry_run: bool = False, engine_url: str | None = None,
             open_engines = [e for e in engines if e.kind != "cx"]
             if not open_engines:
                 raise RuntimeError("engine installed but not recognised")
-            target = open_engines[0]
+            target = max(open_engines, key=lambda e: len(e.available_backends()))
     assert target is not None
     steps.append(f"engine: {target.name} ({target.kind})")
 
