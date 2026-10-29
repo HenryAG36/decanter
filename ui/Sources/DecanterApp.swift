@@ -46,4 +46,5 @@ extension Notification.Name {
     static let runCommand = Notification.Name("decanter.runCommand")
     static let openCDrive = Notification.Name("decanter.openCDrive")
     static let forceQuit = Notification.Name("decanter.forceQuit")
+    static let gptkSheet = Notification.Name("decanter.gptkSheet")
 }

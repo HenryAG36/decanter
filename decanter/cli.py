@@ -149,6 +149,9 @@ def main(argv: list[str] | None = None) -> int:
     p_inst.add_argument("--name", help="directory name under ~/.decanter/engines")
     p_inst.add_argument("--list", action="store_true",
                         help="list downloadable engines instead of installing")
+    p_inst.add_argument("--auto", action="store_true",
+                        help="pick the recommended engine automatically "
+                             "(no --url needed)")
     p_gptk = eng_sub.add_parser("setup-d3dmetal",
                               help="install Apple's D3DMetal.framework into an engine")
     p_gptk.add_argument("--dmg", required=True,
@@ -509,22 +512,36 @@ def cmd_engines(args) -> int:
                   f"  backends={','.join(e.available_backends())}\n  root={e.root}")
         return 0
     if action == "install":
-        if args.list or not args.url:
+        url = args.url
+        if url is None and getattr(args, "auto", False):
+            # one-click install: pick the best asset automatically
+            from .migrate import _pick_engine_asset
+            try:
+                asset = _pick_engine_asset(fetch_open_engine_releases())
+            except Exception as exc:
+                eprint(f"could not fetch release feed: {exc}")
+                return 1
+            if asset is None:
+                eprint("could not find a downloadable open engine")
+                return 1
+            print(f"selected {asset['name']}")
+            url = asset["url"]
+        if args.list or url is None:
             try:
                 releases = fetch_open_engine_releases()
             except Exception as exc:
                 eprint(f"could not fetch release feed: {exc}")
-                if not args.url:
+                if not url:
                     return 1
                 releases = []
             for rel in releases:
                 print(f"release {rel['tag']}")
                 for a in rel["assets"]:
                     print(f"  {a['name']}  ({human_size(a['size'])})\n    {a['url']}")
-            if not args.url:
+            if not url:
                 print("\npick one: decanter engine install --url URL [--name NAME]")
                 return 0
-        dest = install_engine(args.url, args.name)
+        dest = install_engine(url, args.name)
         print(f"installed engine at {dest}")
         eng = get_engine(str(dest))
         if eng:
@@ -536,8 +553,14 @@ def cmd_engines(args) -> int:
     if action == "setup-d3dmetal":
         return cmd_setup_d3dmetal(args)
     if action == "setup-dxvk":
-        eng = (get_engine(args.engine) if args.engine else
-               ([e for e in discover_engines() if e.kind != "cx"] or [None])[0])
+        if args.engine:
+            eng = get_engine(args.engine)
+        else:
+            # prefer a non-cx engine still missing dxvk (e.g. just installed)
+            cands = [e for e in discover_engines() if e.kind != "cx"]
+            eng = (next((e for e in cands
+                         if "dxvk" not in e.available_backends()), None)
+                   or (cands or [None])[0])
         if eng is None or eng.kind == "cx":
             eprint("need an open (non-CrossOver) engine — install one with "
                    "`decanter engine install`")

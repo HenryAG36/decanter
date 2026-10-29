@@ -6,6 +6,7 @@ struct NewBottleSheet: View {
     @Environment(\.dismiss) var dismiss
     @State private var name = ""
     @State private var template = "win10_64"
+    @State private var engine = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -15,6 +16,14 @@ struct NewBottleSheet: View {
                 Picker("Bottle type:", selection: $template) {
                     ForEach(templates, id: \.self) { Text($0).tag($0) }
                 }
+                if !store.engines.isEmpty {
+                    Picker("Engine:", selection: $engine) {
+                        ForEach(store.engines) { e in
+                            Text(e.default == true ? "\(e.name) (default)" : e.name)
+                                .tag(e.root)
+                        }
+                    }
+                }
             }
             Text("A bottle is a self-contained Windows environment holding its own C: drive, registry and installed programs.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -22,7 +31,9 @@ struct NewBottleSheet: View {
                 Spacer()
                 Button("Cancel") { dismiss() }
                 Button("Create") {
-                    store.cli(["create", name, "-t", template]); dismiss()
+                    var args = ["create", name, "-t", template]
+                    if !engine.isEmpty { args += ["-e", engine] }
+                    store.cli(args); dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty ||
@@ -30,6 +41,12 @@ struct NewBottleSheet: View {
             }
         }
         .padding(20).frame(width: 420)
+        .onAppear {
+            if engine.isEmpty {
+                engine = store.engines.first { $0.default == true }?.root
+                    ?? store.engines.first?.root ?? ""
+            }
+        }
     }
 
     private var templates: [String] {
@@ -371,8 +388,23 @@ struct PreferencesView: View {
                     }
                     .padding(.vertical, 4)
                 }
-                Text("Install more engines with `decanter engine install`.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Divider()
+                Text("Install a free engine").font(.caption).bold()
+                HStack {
+                    Button("Install Recommended Engine…") {
+                        store.cli(["engine", "install", "--auto"]) { r in
+                            if r.status == 0 {
+                                // give it DXVK + MoltenVK for CrossOver-grade graphics
+                                store.cli(["engine", "setup-dxvk"])
+                            }
+                        }
+                    }
+                    Button("Set up D3DMetal…") {
+                        NotificationCenter.default.post(name: .gptkSheet, object: nil)
+                    }
+                }
+                Text("Recommended = newest WineCX build (wine-crossover). D3DMetal needs Apple's own free download and unlocks DX12.")
+                    .font(.caption2).foregroundStyle(.secondary)
             }
             .padding()
             .tabItem { Label("Engines", systemImage: "cpu") }

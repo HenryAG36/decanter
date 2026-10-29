@@ -142,7 +142,10 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .forceQuit)) { _ in
-            if let b = selectedBottle { store.cli(["kill", "-b", b.path]) }
+            for b in store.bottles { store.cli(["kill", "-b", b.path]) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .gptkSheet)) { _ in
+            sheet = .gptk
         }
     }
 
@@ -353,18 +356,18 @@ struct BottleDetailView: View {
                     Text("Version reported to programs").font(.caption).foregroundStyle(.secondary)
                 }
             }
-            Toggle("MSync — Mach-semaphore synchronization", isOn: toggleBinding(
+            Toggle("MSync — Mach-semaphore synchronization (CrossOver engines only)", isOn: toggleBinding(
                 get: bottle.msync, key: "msync", warn: "Some Windows applications will not work correctly with MSync enabled."))
+            Toggle("ESync — eventfd synchronization", isOn: toggleBinding(
+                get: bottle.esync, key: "esync", warn: ""))
+            Toggle("FSync — futex synchronization", isOn: toggleBinding(
+                get: bottle.fsync, key: "fsync", warn: ""))
             Toggle("High resolution mode (Retina rendering)", isOn: toggleBinding(
                 get: bottle.retina, key: "retina", warn: "Many Windows applications render incorrectly in high resolution mode."))
             Toggle("NVAPI / DLSS support (DXVK)", isOn: Binding(
                 get: { bottle.nvapi },
                 set: { on in store.setConfig(bottle,
                     ["env:DXVK_ENABLE_NVAPI=\(on ? "1" : "")", "override:nvapi64=\(on ? "native,builtin" : "disabled")"]) }))
-            if bottle.esync || bottle.fsync {
-                Toggle("Esync", isOn: toggleBinding(get: bottle.esync, key: "esync", warn: ""))
-                Toggle("Fsync", isOn: toggleBinding(get: bottle.fsync, key: "fsync", warn: ""))
-            }
         }
     }
 

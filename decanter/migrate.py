@@ -10,6 +10,7 @@ engine actually supports.
 
 from __future__ import annotations
 
+import re
 import shutil
 import sys
 from pathlib import Path
