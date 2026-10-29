@@ -24,6 +24,7 @@ from .engine import (
     Engine, default_engine, discover_engines, fetch_open_engine_releases,
     get_engine, install_engine, ENGINES_DIR,
 )
+from .programs import list_programs
 from .launcher import (
     LaunchOptions, LaunchError, run as launch_run, run_unix, run_wine_app,
     stop_bottle, wineserver_ctl,
@@ -123,6 +124,9 @@ def main(argv: list[str] | None = None) -> int:
         prog="decanter",
         description="Open-source Windows-on-macOS game/app launcher "
                     "(CrossOver-compatible bottles)")
+    parser.add_argument("--json", action="store_true",
+                        help="machine-readable JSON output for list/status/"
+                             "programs/engines/config/doctor")
     parser.add_argument("--version", action="version",
                         version=f"decanter {__version__}")
     sub = parser.add_subparsers(dest="command", metavar="command")
@@ -149,6 +153,9 @@ def main(argv: list[str] | None = None) -> int:
 
     # -- bottle management ---------------------------------------------------
     sub.add_parser("list", aliases=["ls"], help="list bottles")
+    p_prog = sub.add_parser("programs", aliases=["apps"],
+                          help="list installed programs in a bottle")
+    _add_bottle_arg(p_prog)
     p_status = sub.add_parser("status", aliases=["info"],
                               help="show bottle details")
     _add_bottle_arg(p_status)
@@ -251,15 +258,42 @@ def _dispatch(args) -> int:
     cmd = args.command
 
     if cmd == "doctor":
+        if args.json:
+            return _json_doctor()
         return cmd_doctor()
     if cmd in ("engines", "engine"):
+        if args.json and (args.engine_cmd or "list") == "list":
+            default = default_engine()
+            print(json.dumps([{"name": e.name, "kind": e.kind,
+                               "version": e.version, "root": str(e.root),
+                               "backends": e.available_backends(),
+                               "templates": e.templates(),
+                               "default": e == default}
+                              for e in discover_engines()]))
+            return 0
         return cmd_engines(args)
     if cmd in ("list", "ls"):
+        if args.json:
+            return _json_list()
         return cmd_list(args)
+    if cmd in ("programs", "apps"):
+        b = _bottle_or_fail(args.bottle)
+        progs = list_programs(b)
+        if args.json:
+            print(json.dumps(progs))
+        else:
+            for p in progs:
+                print(f"{p['name']}\n    {p.get('target') or '(no target)'}")
+        return 0
     if cmd in ("status", "info"):
         b = _bottle_or_fail(args.bottle)
-        print(json.dumps(b.describe(), indent=2))
-        print(f"size: {human_size(dir_size(b.path))}")
+        d = b.describe()
+        d["size_bytes"] = dir_size(b.path)
+        if args.json:
+            print(json.dumps(d))
+        else:
+            print(json.dumps(d, indent=2))
+            print(f"size: {human_size(d['size_bytes'])}")
         return 0
     if cmd == "create":
         eng = _engine_or_fail(args.engine)
@@ -322,6 +356,14 @@ def _dispatch(args) -> int:
         wineserver_ctl(LaunchOptions(bottle=b, engine=eng), "-w")
         return 0
     if cmd == "config":
+        if args.json and (args.config_cmd or "get") == "get":
+            b = _bottle_or_fail(args.bottle)
+            print(json.dumps({"name": b.name, "path": str(b.path),
+                              "template": b.template,
+                              "arch": b.winearch,
+                              "windows_version": b.windows_version,
+                              "env": b.env_vars()}))
+            return 0
         return cmd_config(args)
     if cmd == "shortcut":
         b = _bottle_or_fail(args.bottle)
@@ -345,6 +387,34 @@ def _dispatch(args) -> int:
 # ----------------------------------------------------------------------------
 # commands
 # ----------------------------------------------------------------------------
+
+def _json_list() -> int:
+    default = get_default_bottle()
+    out = []
+    for b in list_bottles():
+        d = b.describe()
+        d["default"] = bool(default and default.path == b.path)
+        out.append(d)
+    print(json.dumps(out))
+    return 0
+
+
+def _json_doctor() -> int:
+    rosetta = subprocess.run(["/usr/bin/arch", "-x86_64", "/usr/bin/true"],
+                             capture_output=True).returncode == 0
+    print(json.dumps({
+        "decanter_version": __version__,
+        "machine": platform.machine(),
+        "macos": platform.mac_ver()[0],
+        "rosetta": rosetta,
+        "engines": [{"name": e.name, "kind": e.kind, "version": e.version,
+                     "backends": e.available_backends(),
+                     "root": str(e.root)}
+                    for e in discover_engines()],
+        "bottle_count": len(list_bottles()),
+    }))
+    return 0
+
 
 def cmd_doctor() -> int:
     print(f"decanter {__version__}")

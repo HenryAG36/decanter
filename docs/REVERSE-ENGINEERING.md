@@ -141,3 +141,29 @@ and running.`). Generic wines use `WINEESYNC`/`WINEFSYNC` instead.
   `macOS_Wine_builds` (vanilla), WhiskyWine.
 * `D3DMetal.framework` is proprietary Apple — user installs from the free
   GPTK dmg; decanter only copies it into place (`engine setup-d3dmetal`).
+
+## 8. GUI surface (CrossOver 26.3)
+
+Observed from the app bundle (`Contents/Resources/Base.lproj` nibs +
+`Localizable.strings`); decanter's SwiftUI UI implements the same
+workflows with original code/layout.
+
+* `MainWindow` + `IconCollectionView`/`LauncherIconView`: sidebar of
+  bottles ("HOME", "PRIVATE BOTTLES") + icon grid of installed programs.
+* Per-bottle actions: Install Software, Run Command (with captured
+  "Command results"), Open C: drive, Rename, Duplicate, Export to
+  Archive, Delete, Force Quit, Clear/Rebuild Programs, Make Default.
+* Per-bottle toggles: graphics backend (Auto/D3DMetal/DXMT/DXVK/Wine),
+  Vulkan backend (MoltenVK), DLSS for D3DMetal/DXMT, MSync,
+  High-Resolution mode, CrossOver Preview flag — all stored as
+  `[EnvironmentVariables]` in cxbottle.conf, toggles warn about reboot.
+* Install flow: CrossTie "installation recipes" with bottle-type
+  compatibility ratings; bottle templates grouped compatible/
+  incompatible; dependency chain + download progress.
+* Program discovery: `desktopdata/cxmenu/<encoded-dir>/<name>.lnk|.url`
+  files are `/bin/sh` wrappers (`exec wine --bottle X --start
+  "C:/path/real.lnk"`) — decanter resolves `--start` → the in-bottle
+  .lnk/.url, then parses the target (Shell Link local path or INI URL).
+  Filenames escape as `+`=space, `^XX`=hex.
+* Paid/licensing surfaces (DemoNag, SerialCodeRegister, Publish,
+  SubmitRating, CrossTie recipe DB) deliberately not reproduced.

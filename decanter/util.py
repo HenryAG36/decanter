@@ -188,6 +188,19 @@ def unix_to_win_path(path: str) -> str:
     return "Z:" + p.replace("/", "\\")
 
 
+def win_to_unix_path(bottle_dir: Path, win_path: str) -> Path | None:
+    """Convert a ``C:\\...`` / ``Z:\\...`` windows path into the bottle's
+    unix filesystem (respecting dosdevices symlinks)."""
+    m = re.match(r"^([a-zA-Z]):[\\/](.*)$", win_path)
+    if not m:
+        return None
+    drive, rest = m.group(1).lower(), m.group(2).replace("\\", "/")
+    link = bottle_dir / "dosdevices" / f"{drive}:"
+    if not link.exists():
+        return None
+    return link / rest
+
+
 def is_win_path(value: str) -> bool:
     """Heuristic matching the perl wrapper's is_valid_win_path()."""
     if re.match(r"^[a-zA-Z]:[\\/]", value):
@@ -223,6 +236,61 @@ def find_exe_in_drive_c(bottle_dir: Path, name: str) -> Path | None:
         if sys32:
             matches = sys32
     return matches[0]
+
+
+def decode_cxmenu_name(name: str) -> str:
+    """Decode cxmenu filename escaping: ``+`` = space, ``^XX`` = hex char."""
+    out = []
+    i = 0
+    while i < len(name):
+        c = name[i]
+        if c == "+":
+            out.append(" ")
+            i += 1
+        elif c == "^" and i + 2 < len(name):
+            try:
+                out.append(chr(int(name[i + 1:i + 3], 16)))
+            except ValueError:
+                out.append(c)
+            i += 3
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+def parse_url_file(path: Path) -> str | None:
+    """Read URL= from a Windows .url (INI) file."""
+    try:
+        for line in path.read_text(errors="replace").splitlines():
+            if line.strip().lower().startswith("url="):
+                return line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return None
+
+
+def lnk_target(path: Path) -> str | None:
+    """Best-effort extraction of a .lnk's Windows target path.
+
+    Parses just enough of the Shell Link format: the first plausible
+    ``<drive>:\\...`` ascii path in the LinkInfo / string-data region.
+    """
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    if len(data) < 0x4C or data[:4] != b"\x4c\x00\x00\x00":
+        return None
+    best = None
+    for m in re.finditer(rb"([A-Za-z]:\\[ -~]{4,200}?(?:\.exe|\.bat|\.cmd|\.msi))\x00?",
+                         data, re.I):
+        cand = m.group(1).decode("ascii", errors="replace")
+        # prefer paths that look like real fs paths
+        if best is None or ("users" not in cand.lower()
+                            and "temp" not in cand.lower()):
+            best = cand
+    return best
 
 
 def human_size(num: int) -> str:

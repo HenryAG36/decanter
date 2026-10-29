@@ -124,6 +124,34 @@ decanter shortcut -b BOTTLE --exe "C:\GOG\game.exe" --name "My Game"
 
 creates `~/Applications/My Game.app` that double-click-launches the game.
 
+## GUI
+
+`Decanter.app` — a native SwiftUI frontend mirroring CrossOver's workflow
+with original code/design:
+
+```
+cd ui && ./build.sh && open ../build/Decanter.app
+```
+
+* Sidebar of bottles + Home view aggregating every installed program
+* Per-bottle program grid (double-click to launch, right-click for
+  .app shortcuts) — reads the same `desktopdata/cxmenu` + Start Menu
+  metadata CrossOver's UI uses
+* Bottle Settings: graphics backend (Auto/D3DMetal/DXMT/DXVK/wined3d),
+  Windows version, MSync, High-Resolution, NVAPI/DLSS, esync/fsync —
+  with CrossOver-style reboot warnings
+* Install Software, Run Command (with captured output panel), New
+  Bottle, Restore Archive, Rename/Duplicate/Delete/Force Quit,
+  Wine tools (winecfg, regedit, control, taskmgr, cmd, explorer,
+  uninstaller) and a live command log
+* Preferences: engine inventory, diagnostics, doctor info
+
+The app bundles the python backend in `Contents/Resources/python` and
+runs it via `/usr/bin/python3 -m decanter`, or uses `DECANTER_BIN`/a
+`decanter` on PATH. Every UI action maps 1:1 to the CLI, which stays
+fully usable on its own. `--json` output (`list`, `status`, `programs`,
+`engines list`, `config get`, `doctor`) is the IPC contract.
+
 ## Requirements
 
 * macOS on Apple Silicon or Intel
