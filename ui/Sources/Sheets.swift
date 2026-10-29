@@ -254,6 +254,51 @@ struct RunCommandSheet: View {
     }
 }
 
+struct GPTKSheet: View {
+    @EnvironmentObject var store: Store
+    @Environment(\.dismiss) var dismiss
+    @State private var dmg = ""
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("D3DMetal needs Apple's own download").font(.title2).bold()
+            Text("""
+            D3DMetal — the fastest DX11/DX12 path, and the only good DX12 \
+            option — is Apple's proprietary component in the free Game \
+            Porting Toolkit. Decanter can't download it for you (Apple's \
+            license), but it's a one-time download with a free Apple \
+            Developer account.
+            """)
+            .font(.callout).foregroundStyle(.secondary)
+            HStack {
+                Button("Open Apple's Download Page") {
+                    NSWorkspace.shared.open(URL(string:
+                        "https://developer.apple.com/download/all/?q=game%20porting%20toolkit")!)
+                }
+                Spacer()
+            }
+            Divider()
+            HStack {
+                TextField("Downloaded Game-Porting-Toolkit .dmg:", text: $dmg)
+                Button("Choose…") {
+                    let p = NSOpenPanel()
+                    p.allowedContentTypes = [.init(filenameExtension: "dmg") ?? .data]
+                    if p.runModal() == .OK { dmg = p.url?.path ?? dmg }
+                }
+            }
+            Text("Once installed, the D3DMetal backend becomes available per bottle.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                Button("Install from .dmg") {
+                    store.cli(["engine", "setup-d3dmetal", "--dmg", dmg]); dismiss()
+                }.keyboardShortcut(.defaultAction).disabled(dmg.isEmpty)
+            }
+        }
+        .padding(20).frame(width: 480)
+    }
+}
+
 struct MigrateSheet: View {
     @EnvironmentObject var store: Store
     @Environment(\.dismiss) var dismiss

@@ -12,11 +12,11 @@ struct ContentView: View {
     @State private var showLog = false
 
     enum Sheet: Identifiable {
-        case newBottle, install(Bottle?), runCmd(Bottle?), restore, migrate
+        case newBottle, install(Bottle?), runCmd(Bottle?), restore, migrate, gptk
         var id: String {
             switch self {
             case .newBottle: return "new"; case .restore: return "restore"
-            case .migrate: return "migrate"
+            case .migrate: return "migrate"; case .gptk: return "gptk"
             case .install(let b): return "install-\(b?.id ?? "none")"
             case .runCmd(let b): return "run-\(b?.id ?? "none")"
             }
@@ -88,6 +88,7 @@ struct ContentView: View {
             case .runCmd(let b): RunCommandSheet(bottle: b ?? selectedBottle)
                 .environmentObject(store)
             case .migrate: MigrateSheet().environmentObject(store)
+            case .gptk: GPTKSheet().environmentObject(store)
             }
         }
         .alert("Delete bottle?", isPresented: .constant(confirmDelete != nil)) {
@@ -383,6 +384,12 @@ struct BottleDetailView: View {
     private var backendBinding: Binding<String> {
         Binding(get: { bottle.backend }, set: { v in
             if v != bottle.backend {
+                if v == "d3dmetal" && !store.engines.contains(where: {
+                    ($0.backends ?? []).contains("d3dmetal")
+                }) {
+                    sheet = .gptk
+                    return
+                }
                 rebootAlert = (bottle, "", { store.setBackend(bottle, v) })
             }
         })

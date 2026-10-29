@@ -148,4 +148,9 @@ def migrate(dry_run: bool = False, engine_url: str | None = None,
     progress(f"  - {CROSSOVER_USER_DIR} (settings/caches; bottles were moved out)")
     progress("  - ~/Applications/CrossOver/*.app launchers (recreate with "
              "`decanter shortcut`)")
+    progress("")
+    progress("want DX12 / max graphics performance? D3DMetal is Apple's free")
+    progress("download — Decanter can't fetch it for you (Apple license):")
+    progress("  https://developer.apple.com/download/all/?q=game%20porting%20toolkit")
+    progress("  then: decanter engine setup-d3dmetal --dmg <file>.dmg")
     return result

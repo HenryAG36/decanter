@@ -552,7 +552,8 @@ def cmd_setup_d3dmetal(args) -> int:
     dmg = Path(args.dmg).expanduser()
     if not dmg.is_file():
         eprint(f"error: {dmg} not found — download the Game Porting Toolkit "
-               "dmg from developer.apple.com (free Apple account)")
+               "dmg (free Apple Developer account):")
+        eprint("  https://developer.apple.com/download/all/?q=game%20porting%20toolkit")
         return 2
     eng = get_engine(args.engine)
     if eng is None:
