@@ -152,19 +152,46 @@ runs it via `/usr/bin/python3 -m decanter`, or uses `DECANTER_BIN`/a
 fully usable on its own. `--json` output (`list`, `status`, `programs`,
 `engines list`, `config get`, `doctor`) is the IPC contract.
 
+## Installation (macOS)
+
+### Option A — download the app (easiest)
+
+1. Download `Decanter-macOS.zip` from the
+   [latest release](https://github.com/HenryAG36/decanter/releases/latest).
+2. Unzip and drag `Decanter.app` into `/Applications`.
+3. First launch: the app is ad-hoc signed, so Gatekeeper will warn —
+   **right-click → Open**, or run:
+   ```
+   xattr -dr com.apple.quarantine /Applications/Decanter.app
+   ```
+4. The app is self-contained (the backend ships inside the bundle — no
+   Python install needed). It finds CrossOver bottles automatically; if you
+   don't have CrossOver, use **Migrate / engine install** to fetch a free
+   open engine.
+
+### Option B — build from source
+
+```
+git clone https://github.com/HenryAG36/decanter && cd decanter
+ui/build.sh && open build/Decanter.app       # needs Xcode/Swift toolchain
+```
+
+### Option C — CLI only (no app, no Xcode)
+
+```
+git clone https://github.com/HenryAG36/decanter && cd decanter
+ln -s "$PWD/bin/decanter" /usr/local/bin/decanter    # or add bin/ to PATH
+decanter doctor
+```
+
 ## Requirements
 
-* macOS on Apple Silicon or Intel
-* Rosetta 2 on Apple Silicon (x86_64 wine builds run through it)
-* Python 3.9+ (stdlib only — no dependencies)
-* At least one engine (CrossOver.app, or an installed open engine)
-
-## Install
-
-```
-git clone <repo> && cd decanter
-sudo ln -s "$PWD/bin/decanter" /usr/local/bin/decanter   # or add bin/ to PATH
-```
+* macOS 14+ on Apple Silicon (the prebuilt app is arm64; Wine itself runs
+  through Rosetta 2)
+* Rosetta 2: `softwareupdate --install-rosetta --agree-to-license`
+* Python 3.9+ — only needed for the CLI; the app bundles its own backend
+* At least one engine: CrossOver.app if installed, **or** a free open
+  engine — `decanter engine install` fetches one automatically
 
 ## Legal / provenance
 
