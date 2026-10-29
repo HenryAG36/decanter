@@ -44,6 +44,13 @@ struct Program: Identifiable, Codable, Hashable {
         guard let t = target?.lowercased() else { return false }
         return t.contains("://")
     }
+
+    /// Executable basename used to detect a live process in `ps`.
+    var exeBasename: String? {
+        guard let t = target, !isURL else { return nil }
+        return t.replacingOccurrences(of: "\\", with: "/")
+            .split(separator: "/").last.map(String.init)?.lowercased()
+    }
 }
 
 struct EngineInfo: Identifiable, Codable, Hashable {
@@ -170,6 +177,10 @@ final class Store: ObservableObject {
     @Published var busy = false
     @Published var lastError: String?
     @Published var outputLog: String = ""
+    @Published var selectedProgram: String?              // programKey, nil = nothing selected
+    @Published var running: Set<String> = []             // programKeys with a live process
+    private var recentlyLaunched: [String: Date] = [:]   // optimistic "just started" marks
+    private var pollTimer: Timer?
 
     func refresh() {
         busy = true
@@ -191,6 +202,7 @@ final class Store: ObservableObject {
                 self.doctor = doctor; self.programs = progs
                 self.busy = false
                 if let err { self.lastError = err }  // never clear an error the user hasn't dismissed
+                self.pollRunning()
             }
         }
     }
@@ -223,6 +235,72 @@ final class Store: ObservableObject {
     func launch(_ args: [String]) { cli(["run", "--no-wait"] + args, refreshAfter: false) }
 
     func programsFor(_ b: Bottle) -> [Program] { programs[b.path] ?? [] }
+
+    // MARK: - program selection & running state ------------------------------
+
+    func programKey(_ b: Bottle, _ p: Program) -> String { b.path + "|" + p.name }
+
+    /// Launch a program, refusing a second instance while one is live.
+    func launchProgram(_ b: Bottle, _ p: Program) {
+        guard let t = p.target else {
+            lastError = "'\(p.name)' has no launch target."; return }
+        let key = programKey(b, p)
+        if running.contains(key) || recentlyLaunched[key] != nil {
+            lastError = "'\(p.name)' is already running."; return }
+        recentlyLaunched[key] = Date()
+        if p.isURL { cli(["start", "-b", b.path, t], refreshAfter: false) }
+        else { launch(["-b", b.path, "--", t]) }
+        // catch the spawned process (or learn it already exited)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { self.pollRunning() }
+    }
+
+    /// Scan the process table; flag programs whose exe is alive.
+    func pollRunning() {
+        let bottles = self.bottles, progs = self.programs
+        Task.detached {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/bin/ps")
+            p.arguments = ["-axo", "command"]
+            let pipe = Pipe(); p.standardOutput = pipe
+            p.standardError = FileHandle.nullDevice
+            try? p.run(); p.waitUntilExit()
+            let out = String(
+                data: pipe.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8)?.lowercased() ?? ""
+            var live: Set<String> = []
+            for b in bottles {
+                for prog in progs[b.path] ?? [] {
+                    if let exe = prog.exeBasename, !exe.isEmpty,
+                       out.contains(exe) {
+                        live.insert(b.path + "|" + prog.name)
+                    }
+                }
+            }
+            await MainActor.run {
+                // optimistic marks persist ~20s so a starting app can't be relaunched
+                let cutoff = Date().addingTimeInterval(-20)
+                self.recentlyLaunched = self.recentlyLaunched.filter { $0.value > cutoff }
+                self.running = live.union(self.recentlyLaunched.keys)
+            }
+        }
+    }
+
+    /// Begin lightweight running-state polling (call once at app start).
+    func startRunningPoll() {
+        guard pollTimer == nil else { return }
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 6, repeats: true) {
+            [weak self] _ in self?.pollRunning()
+        }
+    }
+
+    /// The selected (bottle, program) pair if it still exists.
+    func selectedProgramPair() -> (Bottle, Program)? {
+        guard let k = selectedProgram else { return nil }
+        for b in bottles {
+            for p in programsFor(b) where programKey(b, p) == k { return (b, p) }
+        }
+        return nil
+    }
     func allPrograms() -> [(Bottle, Program)] {
         bottles.flatMap { b in programsFor(b).map { (b, $0) } }
     }

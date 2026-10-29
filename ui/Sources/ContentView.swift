@@ -235,6 +235,7 @@ struct HomeView: View {
                 }
                 HStack {
                     Text("Installed Programs").font(.title2).bold()
+                    LaunchButton()
                     Spacer()
                     Button("Install Software…") { sheet = .install(nil) }
                         .controlSize(.large)
@@ -249,6 +250,8 @@ struct HomeView: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 96))], spacing: 18) {
                         ForEach(all, id: \.1.id) { b, p in ProgramTile(bottle: b, program: p) }
                     }
+                    Text("Click a program to select it — then press Launch, or double-click to run.")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
                 if let err = store.lastError {
                     Text(err).font(.callout).foregroundStyle(.red)
@@ -317,7 +320,11 @@ struct BottleDetailView: View {
 
     private var programs: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Programs").font(.headline)
+            HStack {
+                Text("Programs").font(.headline)
+                Spacer()
+                LaunchButton()
+            }
             let progs = store.programsFor(bottle)
             if progs.isEmpty {
                 Text("No software is installed")
@@ -326,6 +333,8 @@ struct BottleDetailView: View {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 96))], spacing: 18) {
                     ForEach(progs) { p in ProgramTile(bottle: bottle, program: p) }
                 }
+                Text("Click a program to select it — then press Launch, or double-click to run.")
+                    .font(.caption2).foregroundStyle(.secondary)
             }
         }
     }
@@ -428,11 +437,35 @@ struct BottleDetailView: View {
 
 // MARK: - Program tile
 
+/// Primary launch control — enabled only when a program tile is selected.
+struct LaunchButton: View {
+    @EnvironmentObject var store: Store
+
+    var body: some View {
+        if let (b, p) = store.selectedProgramPair() {
+            let isRunning = store.running.contains(store.programKey(b, p))
+            Button(isRunning ? "\(p.name) is running" : "Launch \(p.name)") {
+                store.launchProgram(b, p)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isRunning)
+            .keyboardShortcut(.defaultAction)
+            .animation(.none, value: isRunning)
+        } else {
+            Button("Launch") {}.disabled(true).opacity(0.5)
+        }
+    }
+}
+
 struct ProgramTile: View {
     @EnvironmentObject var store: Store
     let bottle: Bottle
     let program: Program
     @State private var hover = false
+
+    private var key: String { store.programKey(bottle, program) }
+    private var selected: Bool { store.selectedProgram == key }
+    private var isRunning: Bool { store.running.contains(key) }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -441,6 +474,13 @@ struct ProgramTile: View {
                 .clipShape(RoundedRectangle(cornerRadius: 14))
                 .overlay(RoundedRectangle(cornerRadius: 14)
                     .strokeBorder(.white.opacity(0.14), lineWidth: 1))
+                .overlay(alignment: .topTrailing) {
+                    if isRunning {
+                        Circle().fill(.green).frame(width: 12, height: 12)
+                            .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 1.5))
+                            .offset(x: 4, y: -4)
+                    }
+                }
                 .shadow(color: .black.opacity(hover ? 0.35 : 0.18),
                         radius: hover ? 8 : 4, y: 2)
                 .scaleEffect(hover ? 1.06 : 1)
@@ -448,14 +488,19 @@ struct ProgramTile: View {
                 .multilineTextAlignment(.center).frame(width: 92)
         }
         .padding(6)
-        .background(hover ? Color.primary.opacity(0.06) : .clear,
-                    in: .rect(cornerRadius: 10))
+        .background(
+            selected ? Color.accentColor.opacity(0.22)
+                : (hover ? Color.primary.opacity(0.06) : .clear),
+            in: .rect(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10)
+            .strokeBorder(Color.accentColor, lineWidth: selected ? 2 : 0))
         .onHover { hover = $0 }
         .animation(.easeOut(duration: 0.15), value: hover)
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { run() }
+        .onTapGesture { store.selectedProgram = selected ? nil : key }
         .contextMenu {
-            Button("Run") { run() }
+            Button(isRunning ? "Running" : "Run") { run() }.disabled(isRunning)
             if let t = program.target {
                 Button("Create Shortcut App…") { shortcut(t) }
             }
@@ -465,7 +510,9 @@ struct ProgramTile: View {
                 }
             }
         }
-        .help(program.target ?? "No launch target found")
+        .help(selected
+              ? "Selected — press Launch (or double-click) to run"
+              : (program.target ?? "No launch target found"))
     }
 
     @ViewBuilder private var icon: some View {
@@ -493,14 +540,7 @@ struct ProgramTile: View {
         return palette[abs(h)]
     }
 
-    private func run() {
-        guard let t = program.target else { return }
-        if program.isURL {
-            store.cli(["start", "-b", bottle.path, t], refreshAfter: false)
-        } else {
-            store.launch(["-b", bottle.path, "--", t])
-        }
-    }
+    private func run() { store.launchProgram(bottle, program) }
 
     private func shortcut(_ t: String) {
         store.cli(["shortcut", "-b", bottle.path, "--exe", t,

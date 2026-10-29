@@ -11,7 +11,7 @@ struct DecanterApp: App {
                 .environmentObject(store)
                 .frame(minWidth: 820, minHeight: 520)
                 .tint(Color(red: 0.62, green: 0.13, blue: 0.20))
-                .onAppear { store.refresh() }
+                .onAppear { store.refresh(); store.startRunningPoll() }
         }
         .commands {
             CommandGroup(replacing: .newItem) {
