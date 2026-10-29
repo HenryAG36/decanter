@@ -86,10 +86,35 @@ def list_programs(bottle: Bottle) -> list[dict]:
                         "source": "startmenu", "link_file": str(f)})
 
     # if a .lnk didn't yield a target, try to resolve the same-named exe
+    from .util import find_exe_in_drive_c, win_to_unix_path
     for p in programs.values():
         if not p["target"]:
-            from .util import find_exe_in_drive_c
             exe = find_exe_in_drive_c(bottle.path, p["name"])
             if exe:
                 p["target"] = unix_to_win_path(str(exe))
+
+    # extract real icons from the target exe (cached); steam games use
+    # Steam's own librarycache art
+    from .icons import icon_for
+    for p in programs.values():
+        t = p.get("target") or ""
+        if t.lower().endswith(".exe"):
+            unix = win_to_unix_path(bottle.path, t)
+            p["icon"] = icon_for(unix, f"{bottle.name}-{p['name']}") if unix else None
+        elif t.startswith("steam://rungameid/"):
+            p["icon"] = _steam_art(bottle, t.rsplit("/", 1)[-1])
+        else:
+            p["icon"] = None
     return sorted(programs.values(), key=lambda p: p["name"].lower())
+
+
+def _steam_art(bottle, appid: str) -> str | None:
+    """Best image from Steam's local librarycache for an appid."""
+    for prog in ("Program Files (x86)/Steam", "Program Files/Steam"):
+        cache = bottle.path / "drive_c" / prog / "appcache" / "librarycache" / appid
+        if cache.is_dir():
+            arts = sorted(cache.rglob("*.jpg"), key=lambda f: f.stat().st_size,
+                          reverse=True)
+            if arts:
+                return str(arts[0])
+    return None

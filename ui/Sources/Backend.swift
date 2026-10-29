@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 import Combine
 
 // MARK: - Models (decode `decanter --json` output)
@@ -22,6 +22,14 @@ struct Bottle: Identifiable, Codable, Hashable {
     var subtitle: String {
         [template, winearch].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     }
+
+    /// Stable per-bottle tint for sidebar badges.
+    var badgeColor: Color {
+        let palette: [Color] = [
+            Color(red: 0.62, green: 0.13, blue: 0.20), .indigo, .teal,
+            .brown, .purple, .orange, .cyan]
+        return palette[abs(name.hashValue) % palette.count]
+    }
 }
 
 struct Program: Identifiable, Codable, Hashable {
@@ -30,6 +38,7 @@ struct Program: Identifiable, Codable, Hashable {
     let target: String?
     let source: String?
     let link_file: String?
+    let icon: String?
 
     var isURL: Bool {
         guard let t = target?.lowercased() else { return false }

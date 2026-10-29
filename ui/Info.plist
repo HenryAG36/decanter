@@ -12,6 +12,8 @@
 	<key>LSMinimumSystemVersion</key><string>14.0</string>
 	<key>NSPrincipalClass</key><string>NSApplication</string>
 	<key>NSSupportsAutomaticGraphicsSwitching</key><true/>
+	<key>CFBundleIconFile</key><string>AppIcon</string>
+	<key>CFBundleIconName</key><string>AppIcon</string>
 	<key>LSApplicationCategoryType</key><string>public.app-category.games</string>
 </dict>
 </plist>

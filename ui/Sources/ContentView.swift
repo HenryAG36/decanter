@@ -34,7 +34,12 @@ struct ContentView: View {
                 Section("Bottles") {
                     ForEach(store.bottles) { b in
                         HStack {
-                            Image(systemName: "wineglass")
+                            Image(systemName: "wineglass.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.white)
+                                .frame(width: 22, height: 22)
+                                .background(b.badgeColor.gradient,
+                                            in: .rect(cornerRadius: 6))
                             VStack(alignment: .leading) {
                                 Text(b.name)
                                 Text(b.subtitle).font(.caption).foregroundStyle(.secondary)
@@ -211,6 +216,19 @@ struct HomeView: View {
                           systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange).padding(10)
                         .background(.orange.opacity(0.12), in: .rect(cornerRadius: 8))
+                }
+                HStack(spacing: 14) {
+                    if let iconPath = Bundle.main.path(forResource: "AppIcon-1024", ofType: "png"),
+                       let img = NSImage(contentsOfFile: iconPath) {
+                        Image(nsImage: img).resizable()
+                            .frame(width: 44, height: 44)
+                            .clipShape(.rect(cornerRadius: 10))
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Decanter").font(.title.bold())
+                        Text("Windows apps & games on macOS")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
                 }
                 HStack {
                     Text("Installed Programs").font(.title2).bold()
@@ -411,15 +429,26 @@ struct ProgramTile: View {
     @EnvironmentObject var store: Store
     let bottle: Bottle
     let program: Program
+    @State private var hover = false
 
     var body: some View {
         VStack(spacing: 6) {
-            Image(systemName: program.isURL ? "link" : "app")
-                .font(.system(size: 32)).frame(width: 52, height: 52)
-                .background(.quaternary, in: .rect(cornerRadius: 12))
+            icon
+                .frame(width: 60, height: 60)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(.white.opacity(0.14), lineWidth: 1))
+                .shadow(color: .black.opacity(hover ? 0.35 : 0.18),
+                        radius: hover ? 8 : 4, y: 2)
+                .scaleEffect(hover ? 1.06 : 1)
             Text(program.name).font(.caption).lineLimit(2)
                 .multilineTextAlignment(.center).frame(width: 92)
         }
+        .padding(6)
+        .background(hover ? Color.primary.opacity(0.06) : .clear,
+                    in: .rect(cornerRadius: 10))
+        .onHover { hover = $0 }
+        .animation(.easeOut(duration: 0.15), value: hover)
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { run() }
         .contextMenu {
@@ -434,6 +463,31 @@ struct ProgramTile: View {
             }
         }
         .help(program.target ?? "No launch target found")
+    }
+
+    @ViewBuilder private var icon: some View {
+        if let path = program.icon, let img = NSImage(contentsOfFile: path) {
+            Image(nsImage: img).resizable().aspectRatio(contentMode: .fill)
+        } else {
+            // fallback: tinted tile with initial + symbol
+            ZStack {
+                LinearGradient(colors: [tileColor.opacity(0.85), tileColor],
+                               startPoint: .top, endPoint: .bottom)
+                VStack(spacing: 2) {
+                    Text(String(program.name.prefix(1)).uppercased())
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                    Image(systemName: program.isURL ? "link" : "gamecontroller.fill")
+                        .font(.system(size: 11))
+                }
+                .foregroundStyle(.white.opacity(0.95))
+            }
+        }
+    }
+
+    private var tileColor: Color {
+        let palette: [Color] = [.indigo, .teal, .brown, .purple, .pink, .orange, .cyan, .mint]
+        let h = program.name.unicodeScalars.reduce(0) { ($0 &+ Int($1.value)) % palette.count }
+        return palette[abs(h)]
     }
 
     private func run() {

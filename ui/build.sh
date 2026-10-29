@@ -10,6 +10,8 @@ SWIFTC="$(xcrun -f swiftc)"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/python"
 cp Info.plist "$APP/Contents/"
+cp Resources/AppIcon.icns Resources/AppIcon-1024.png \
+   "$APP/Contents/Resources/" 2>/dev/null || true
 
 # bundle the python backend (pure stdlib — runs on /usr/bin/python3)
 cp -R "$ROOT/decanter" "$APP/Contents/Resources/python/"
