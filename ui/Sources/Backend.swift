@@ -198,6 +198,10 @@ final class Store: ObservableObject {
                 if !text.isEmpty {
                     self.outputLog += "$ decanter \(args.joined(separator: " "))\n\(text)\n\n"
                 }
+                if result.status != 0 {
+                    self.lastError = text.isEmpty
+                        ? "command failed (exit \(result.status))" : text
+                }
                 self.busy = false
                 completion?(result)
                 if refreshAfter { self.refresh() }

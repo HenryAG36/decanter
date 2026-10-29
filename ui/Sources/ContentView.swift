@@ -66,6 +66,9 @@ struct ContentView: View {
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
+                if store.busy { ProgressView().controlSize(.small) }
+            }
+            ToolbarItem(placement: .automatic) {
                 Button { showLog.toggle() } label: {
                     Image(systemName: "terminal") }
                     .help("Command log")
@@ -96,6 +99,11 @@ struct ContentView: View {
         } message: {
             Text("Deleting '\(confirmDelete?.name ?? "")' permanently erases all Windows applications and documents in its C: drive.")
         }
+        .alert("Decanter", isPresented: Binding(
+            get: { store.lastError != nil },
+            set: { if !$0 { store.lastError = nil } })) {
+            Button("OK") { store.lastError = nil }
+        } message: { Text(store.lastError ?? "") }
         .alert("Rename Bottle", isPresented: .constant(renameTarget != nil)) {
             TextField("New name", text: $renameText)
             Button("Rename") {

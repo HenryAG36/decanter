@@ -110,9 +110,16 @@ def install_app(rid: str, bottle_name: str | None,
         return None
 
     eprint(f"installing {recipe['name']} into bottle {name!r}")
-    bottle = create_bottle(name, eng,
-                           template=template or recipe.get("template", "win10_64"),
-                           description=f"{recipe['name']} (decanter recipe)")
+    from .bottle import find_bottle
+    existing = find_bottle(name)
+    if existing is not None:
+        eprint(f"bottle {name!r} already exists — installing into it")
+        bottle = existing
+    else:
+        bottle = create_bottle(
+            name, eng,
+            template=template or recipe.get("template", "win10_64"),
+            description=f"{recipe['name']} (decanter recipe)")
 
     # installer env vars live in the bottle's env section like CrossOver's
     env = recipe.get("env", {})
