@@ -389,7 +389,7 @@ struct PreferencesView: View {
                     .padding(.vertical, 4)
                 }
                 Divider()
-                Text("Install a free engine").font(.caption).bold()
+                Text("Engine & graphics setup").font(.caption).bold()
                 HStack {
                     Button("Install Recommended Engine…") {
                         store.cli(["engine", "install", "--auto"]) { r in
@@ -403,7 +403,7 @@ struct PreferencesView: View {
                         NotificationCenter.default.post(name: .gptkSheet, object: nil)
                     }
                 }
-                Text("Recommended = newest WineCX build (wine-crossover). D3DMetal needs Apple's own free download and unlocks DX12.")
+                Text("An engine runs the Windows apps. D3DMetal is an optional add-on inside an engine that unlocks DX12 games — it needs Apple's own free download.")
                     .font(.caption2).foregroundStyle(.secondary)
             }
             .padding()
