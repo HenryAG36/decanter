@@ -90,13 +90,20 @@ def build_environment(opts: LaunchOptions) -> dict[str, str]:
         env["CX_WINELOADER"] = str(eng.wine_loader)
     if eng.winewrapper:
         env["WINEWRAPPER"] = str(eng.winewrapper)
+    if not is_cx:
+        # generic engines need their bundled dylibs (MoltenVK etc.) findable —
+        # the equivalent of CrossOver's wrapper setting the dyld search path
+        for d in eng.lib_dirs:
+            _prepend_env_path(env, "DYLD_FALLBACK_LIBRARY_PATH", str(d))
 
     # ---- host quirks ------------------------------------------------------
     if platform.machine() == "arm64":
-        # Rosetta doesn't treat "0" as false — must unset entirely.
-        if env.get("ROSETTA_ADVERTISE_AVX") in (None,):
+        # Rosetta doesn't treat "0" as false — must unset entirely. Only
+        # CrossOver's own wine tolerates ROSETTA_ADVERTISE_AVX; it SIGSEGVs
+        # generic builds (observed: winecx 21.2.0 crashes with it set).
+        if is_cx and env.get("ROSETTA_ADVERTISE_AVX") is None:
             env["ROSETTA_ADVERTISE_AVX"] = "1"
-        elif env["ROSETTA_ADVERTISE_AVX"] in ("0", ""):
+        if env.get("ROSETTA_ADVERTISE_AVX") in ("0", ""):
             env.pop("ROSETTA_ADVERTISE_AVX", None)
         env["DOTNET_EnableWriteXorExecute"] = "0"
 

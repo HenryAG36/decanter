@@ -21,6 +21,7 @@ from .bottle import (
 )
 from .create import CreateError, create_bottle
 from .engine import (
+    setup_dxvk,
     Engine, default_engine, discover_engines, fetch_open_engine_releases,
     get_engine, install_engine, ENGINES_DIR,
 )
@@ -152,6 +153,9 @@ def main(argv: list[str] | None = None) -> int:
     p_gptk.add_argument("--dmg", required=True,
                         help="path to Apple's game-porting-toolkit DMG")
     p_gptk.add_argument("--engine", help="target engine (default: a decanter engine)")
+    p_dxvk = eng_sub.add_parser("setup-dxvk",
+        help="download DXVK + MoltenVK into an open engine")
+    p_dxvk.add_argument("--engine", help="target engine (default: first open engine)")
 
     # -- bottle management ---------------------------------------------------
     sub.add_parser("list", aliases=["ls"], help="list bottles")
@@ -530,6 +534,14 @@ def cmd_engines(args) -> int:
         return 0
     if action == "setup-d3dmetal":
         return cmd_setup_d3dmetal(args)
+    if action == "setup-dxvk":
+        eng = (get_engine(args.engine) if args.engine else
+               ([e for e in discover_engines() if e.kind != "cx"] or [None])[0])
+        if eng is None or eng.kind == "cx":
+            eprint("need an open (non-CrossOver) engine — install one with "
+                   "`decanter engine install`")
+            return 2
+        return 0 if setup_dxvk(eng) else 1
     return 0
 
 

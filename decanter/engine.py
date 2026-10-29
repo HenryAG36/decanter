@@ -84,7 +84,7 @@ class Engine:
                 self.lib_dirs.append(d)
         # cx layouts keep the loader under bin/. Note: *-preloader is only an
         # address-space helper — never a valid WINELOADER on its own.
-        for cand in ("wineloader", "wine64", "wine"):
+        for cand in ("wineloader", "wine", "wine64"):
             p = self.bin_dir / cand
             if p.is_file() and self.wine_loader is None:
                 self.wine_loader = p
@@ -429,3 +429,85 @@ def install_engine(url: str, dest_name: str | None = None,
     tmp.unlink()
     # locate the actual engine root inside the extracted tree
     return _find_engine_root(dest) or dest
+
+
+# ---------------------------------------------------------------------------
+# downloadable open graphics payloads (the CrossOver-parity stack)
+# ---------------------------------------------------------------------------
+
+def _latest_asset(repo: str, pattern: str) -> dict | None:
+    """Find the newest release asset matching `pattern` in a GitHub repo."""
+    try:
+        rel = json.loads(_fetch_text(
+            f"https://api.github.com/repos/{repo}/releases/latest").decode())
+    except Exception:
+        return None
+    for a in rel.get("assets", []):
+        if re.search(pattern, a["name"], re.I):
+            return {"name": a["name"], "url": a["browser_download_url"],
+                    "tag": rel.get("tag_name", "")}
+    return None
+
+
+def _extract_members(tf: tarfile.TarFile, want, dest: Path) -> None:
+    for m in tf.getmembers():
+        if want(m) and m.isfile():
+            m.name = Path(m.name).name
+            tf.extract(m, dest, filter="data")
+
+
+def setup_dxvk(engine: Engine, progress=print) -> bool:
+    """Download DXVK + MoltenVK into an open engine so `backend=dxvk` works —
+    the open-source equivalent of CrossOver's lib/dxvk + libMoltenVK."""
+    lib = engine.root / "lib64"
+    if not lib.is_dir():
+        lib = engine.root / "lib"
+    if not lib.is_dir():
+        lib.mkdir(parents=True)
+
+    asset = _latest_asset("doitsujin/dxvk", r"^dxvk-.*\.tar\.gz$")
+    if asset is None:
+        progress("could not find a DXVK release")
+        return False
+    progress(f"downloading {asset['name']} ({asset['tag']})")
+    import io
+    data = _fetch_text(asset["url"], timeout=600)
+    dxvk_root = lib / "dxvk"
+    (dxvk_root / "x86_64-windows").mkdir(parents=True, exist_ok=True)
+    (dxvk_root / "i386-windows").mkdir(parents=True, exist_ok=True)
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
+        _extract_members(tf, lambda m: re.search(r"/x64/[^/]+\.dll$", m.name),
+                         dxvk_root / "x86_64-windows")
+        _extract_members(tf, lambda m: re.search(r"/x32/[^/]+\.dll$", m.name),
+                         dxvk_root / "i386-windows")
+    progress(f"installed dxvk payload -> {dxvk_root}")
+
+    mvk = _latest_asset("KhronosGroup/MoltenVK", r"^MoltenVK-macos\.tar$")
+    if mvk is None:
+        mvk = _latest_asset("KhronosGroup/MoltenVK", r"macos.*\.(tar|tar\.gz|zip)$")
+    if mvk is None:
+        progress("could not find a MoltenVK release — dxvk still needs Vulkan")
+        return False
+    progress(f"downloading {mvk['name']} ({mvk['tag']})")
+    data = _fetch_text(mvk["url"], timeout=600)
+    dest = lib / "libMoltenVK.dylib"
+    if mvk["name"].endswith(".zip"):
+        import zipfile
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            for n in zf.namelist():
+                if n.endswith("libMoltenVK.dylib") and "macOS" in n:
+                    dest.write_bytes(zf.read(n)); break
+    else:
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:*") as tf:
+            _extract_members(tf, lambda m: m.name.endswith(
+                "libMoltenVK.dylib") and "macOS" in m.name, lib)
+    if not dest.is_file():
+        progress("MoltenVK dylib not found in the archive")
+        return False
+    dest.chmod(0o755)
+    for alias in ("libvulkan.1.dylib", "libvulkan.dylib"):
+        link = lib / alias
+        if not link.exists():
+            link.symlink_to("libMoltenVK.dylib")
+    progress(f"installed MoltenVK -> {dest}")
+    return True

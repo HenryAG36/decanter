@@ -27,13 +27,20 @@ def eprint(*a):
 
 
 def _pick_engine_asset(releases: list[dict]) -> dict | None:
-    """Prefer winecx builds (newer wine + DXVK + MoltenVK bundled)."""
+    """Prefer the newest winecx build (wine-crossover source, closest to
+    CrossOver's own wine), excluding 32-bit-only variants."""
     assets = [a for r in releases for a in r["assets"]]
-    for pat in ("winecx", "WineCX", "wine-crossover"):
-        for a in assets:
-            if pat.lower() in a["name"].lower():
-                return a
-    return assets[0] if assets else None
+
+    def ver(a):
+        m = re.search(r"(\d+)\.(\d+)", a["name"])
+        return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
+
+    cx = [a for a in assets if "winecx" in a["name"].lower()
+          and "32bit" not in a["name"].lower()]
+    if cx:
+        return max(cx, key=ver)
+    wo32 = [a for a in assets if "32bit" not in a["name"].lower()]
+    return max(wo32, key=ver) if wo32 else (assets[0] if assets else None)
 
 
 def _retune_bottle(bottle: Bottle, engine: Engine, dry: bool, log) -> None:
@@ -86,6 +93,17 @@ def migrate(dry_run: bool = False, engine_url: str | None = None,
             target = open_engines[0]
     assert target is not None
     steps.append(f"engine: {target.name} ({target.kind})")
+
+    # 1b. give the open engine the same translation stack CrossOver has —
+    # DXVK + MoltenVK are open-source and auto-downloadable
+    if "dxvk" not in target.available_backends():
+        steps.append("install DXVK + MoltenVK into the engine")
+        if not dry_run:
+            from .engine import setup_dxvk
+            if setup_dxvk(target, progress=progress):
+                engines = discover_engines()
+                target = next((e for e in engines
+                               if e.root == target.root), target)
 
     # 2. move bottles out of the CrossOver support folder ----------------
     cx_bottle_dir = CROSSOVER_USER_DIR / "Bottles"
