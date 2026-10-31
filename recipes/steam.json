@@ -17,11 +17,21 @@
       "data": "d"
     },
     {
+      "key": "HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\steam.exe",
+      "value": "Version",
+      "data": "win81"
+    },
+    {
+      "key": "HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\steamwebhelper.exe",
+      "value": "Version",
+      "data": "win81"
+    },
+    {
       "key": "HKEY_CURRENT_USER\\Software\\Wine\\Fonts\\Replacements",
       "value": "Lucida Console",
       "data": "MS Sans Serif"
     }
   ],
   "winetricks": ["corefonts"],
-  "notes": "SteamSetup self-updates on first launch. corefonts improves UI text rendering; MSXML3/Flash deps in the original profile are obsolete for the modern client."
+  "notes": "SteamSetup self-updates on first launch. corefonts improves UI text rendering; MSXML3/Flash deps in the original profile are obsolete for the modern client. steam.exe/steamwebhelper.exe run as win8.1 via AppDefaults — required on generic wine engines to avoid startup error 0x3008 (bottle itself stays win10 so games see the right version)."
 }
